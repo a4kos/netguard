@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Net Guard",
+  "version": "2.0.0",
+  "description": "Real-time AI-powered browser extension security monitor.",
+  "permissions": ["storage", "alarms", "management", "notifications"],
+  "host_permissions": [
+    "https://netguard.noit.eu/*",
+    "https://netguard-api.noit.eu/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Net Guard"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["inject.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}
