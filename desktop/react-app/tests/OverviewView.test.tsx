@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
-import OverviewView from "../OverviewView";
+import { Extension } from "@/lib/types";
+import OverviewView from "../components/netguard/OverviewView";
 
 const mockStats = {
   total: 10,

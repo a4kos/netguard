@@ -1,13 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = process.env.API_BASE ?? "https://netguard-api.noit.eu";
-
-// Forward the user's own Bearer token from the incoming request to the Flask API.
-// The token is auto-generated per-user by the extension (background.js) and
-// stored in chrome.storage.sync — it is never a shared secret.
-function forwardAuth(req: NextRequest): string {
-  return req.headers.get("Authorization") ?? "";
-}
+const API_TOKEN = process.env.NETGUARD_TOKEN ?? "";
 
 export async function GET(
   req: NextRequest,
@@ -19,8 +13,8 @@ export async function GET(
   const resp = await fetch(upstream, {
     headers: {
       "Content-Type": "application/json",
-      Authorization: forwardAuth(req),
-    },
+      Authorization: `Bearer ${API_TOKEN}`
+    }
   });
 
   const data = await resp.json();
@@ -39,9 +33,9 @@ export async function POST(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: forwardAuth(req),
+      Authorization: `Bearer ${API_TOKEN}`
     },
-    body,
+    body
   });
 
   const data = await resp.json();
@@ -58,8 +52,8 @@ export async function DELETE(
   const resp = await fetch(upstream, {
     method: "DELETE",
     headers: {
-      Authorization: forwardAuth(req),
-    },
+      Authorization: `Bearer ${API_TOKEN}`
+    }
   });
 
   const data = await resp.json();

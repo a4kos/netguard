@@ -99,6 +99,34 @@ cd desktop
 build.bat
 ```
 
+---
+
+## Tests
+
+### Python Backend
+
+Located in `desktop/tests/`.
+
+```bash
+cd desktop
+pip install -r requirements.txt
+pytest
+```
+
+### React Frontend
+
+Located in `desktop/react-app/tests/`.
+
+```bash
+cd desktop/react-app
+npm install
+npm test
+```
+
+### Browser Extension
+
+No automated tests. Manual testing recommended.
+
 Output: `dist\NetGuard\NetGuard.exe`
 
 Distribute the entire `dist\NetGuard\` folder — the `.exe` on its own won't run without the DLLs beside it.

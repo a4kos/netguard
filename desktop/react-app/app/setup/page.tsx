@@ -1,390 +1,294 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { useRouter } from "next/navigation";
-import { API_BASE } from "@/lib/api";
+import { useState, useEffect, useCallback } from "react";
+import type { Extension, Stats } from "@/lib/types";
+import OverviewView from "@/components/netguard/OverviewView";
+import ThreatsView from "@/components/netguard/ThreatsView";
+import AllExtensionsView from "@/components/netguard/AllExtensionsView";
+import StatisticsView from "@/components/netguard/StatisticsView";
+import DetailPanel from "@/components/netguard/DetailPanel";
 
-export default function SetupPage() {
-  const router = useRouter();
-  const [key, setKey] = useState("");
-  const [status, setStatus] = useState<{
-    type: "err" | "ok";
-    text: string;
-  } | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [inputState, setInputState] = useState<"" | "error" | "success">("");
-  const inputRef = useRef<HTMLInputElement>(null);
+type ViewId = "overview" | "threats" | "all" | "statview";
 
-  async function saveKey() {
-    setStatus(null);
-    setInputState("");
-    const trimmed = key.trim();
+const NAV_ITEMS: { id: ViewId; icon: string; label: string }[] = [
+  { id: "overview", icon: "◈", label: "Общ преглед" },
+  { id: "threats", icon: "⚠", label: "Заплахи" },
+  { id: "all", icon: "☰", label: "Всички разширения" },
+  { id: "statview", icon: "◉", label: "Статистика" }
+];
 
-    if (!trimmed) {
-      setStatus({
-        type: "err",
-        text: "Моля, въведи API ключ преди да продължиш."
-      });
-      inputRef.current?.focus();
-      return;
-    }
+export default function Dashboard() {
+  const [view, setView] = useState<ViewId>("overview");
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [threats, setThreats] = useState<Extension[]>([]);
+  const [allExts, setAllExts] = useState<Extension[]>([]);
+  const [lastUpdated, setLastUpdated] = useState("");
+  const [loadError, setLoadError] = useState(false);
+  const [currentTime, setCurrentTime] = useState("");
+  const [activeExt, setActiveExt] = useState<Extension | null>(null);
 
-    if (!trimmed.startsWith("gsk_")) {
-      setStatus({
-        type: "err",
-        text: "Ключът трябва да започва с 'gsk_'. Провери дали си го копирал изцяло."
-      });
-      setInputState("error");
-      return;
-    }
-
-    setLoading(true);
+  // Fetch data — no token needed in browser, proxy handles auth server-side
+  const loadAll = useCallback(async () => {
     try {
-      const resp = await fetch(`${API_BASE}/api/proxy/setup`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: trimmed })
-      });
-      const data = await resp.json();
-      if (data.ok) {
-        setInputState("success");
-        setStatus({
-          type: "ok",
-          text: "✓ Ключът е валиден и запазен. Пренасочване към таблото…"
-        });
-        setTimeout(() => router.push("/"), 1200);
-      } else {
-        setInputState("error");
-        setStatus({
-          type: "err",
-          text: data.error || "Неизвестна грешка. Опитай отново."
-        });
-      }
+      const [s, t, a] = await Promise.all([
+        fetch("/api/proxy/stats").then((r) => r.json()),
+        fetch("/api/proxy/threats").then((r) => r.json()),
+        fetch("/api/proxy/all-extensions").then((r) => r.json())
+      ]);
+      setStats(s);
+      setThreats(t);
+      setAllExts(a);
+      setLoadError(false);
+      setLastUpdated(
+        "Последно обновено: " + new Date().toLocaleTimeString("bg-BG")
+      );
     } catch {
-      setStatus({
-        type: "err",
-        text: "Не може да се свърже с Net Guard. Работи ли приложението?"
-      });
-    } finally {
-      setLoading(false);
+      setLoadError(true);
     }
-  }
+  }, []);
 
-  const borderColor =
-    inputState === "error"
-      ? "#f14c4c"
-      : inputState === "success"
-        ? "#23d18b"
-        : "#243040";
+  useEffect(() => {
+    loadAll();
+    const interval = setInterval(loadAll, 30_000);
+    return () => clearInterval(interval);
+  }, [loadAll]);
+
+  // Clock
+  useEffect(() => {
+    const tick = () => setCurrentTime(new Date().toLocaleTimeString("bg-BG"));
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const headerStatusText = loadError
+    ? "Грешка при зареждане"
+    : allExts.length > 0
+      ? `${allExts.length} разширения проследени`
+      : "Свързване…";
 
   return (
     <div
       style={{
+        display: "grid",
+        gridTemplateRows: "auto 1fr",
         minHeight: "100vh",
-        fontFamily: "'JetBrains Mono', monospace",
+        fontFamily: "'JetBrains Mono',monospace",
         background: "#080b0f",
-        color: "#cdd9e5",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "24px"
+        color: "#cdd9e5"
       }}
     >
-      {}
       <div
         style={{
           position: "fixed",
           inset: 0,
-          pointerEvents: "none",
           background:
-            "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.04) 2px,rgba(0,0,0,0.04) 4px)"
+            "repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.05) 2px,rgba(0,0,0,0.05) 4px)",
+          pointerEvents: "none",
+          zIndex: 9999
         }}
       />
 
+      <header
+        style={{
+          borderBottom: "1px solid #1c2535",
+          background: "#0d1117",
+          padding: "0 32px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          height: "56px",
+          position: "relative",
+          zIndex: 10
+        }}
+      >
+        <div
+          style={{
+            fontFamily: "'Syne',sans-serif",
+            fontSize: "18px",
+            fontWeight: 800,
+            letterSpacing: "-0.02em",
+            color: "#39d0ff"
+          }}
+        >
+          NET<span style={{ color: "#cdd9e5" }}>GUARD</span>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: "24px",
+            fontSize: "11px",
+            color: "#495970"
+          }}
+        >
+          <span>
+            <span
+              style={{
+                display: "inline-block",
+                width: "7px",
+                height: "7px",
+                borderRadius: "50%",
+                background: loadError ? "#f14c4c" : "#23d18b",
+                marginRight: "6px",
+                verticalAlign: "middle",
+                animation: "ng-blink 1.8s infinite"
+              }}
+            />
+            НА ЖИВО
+          </span>
+          <span>{currentTime}</span>
+          <span>{headerStatusText}</span>
+        </div>
+      </header>
+
       <div
         style={{
-          background: "#111820",
-          border: "1px solid #243040",
-          borderRadius: "12px",
-          width: "100%",
-          maxWidth: "520px",
+          display: "grid",
+          gridTemplateColumns: "220px 1fr",
+          height: "calc(100vh - 56px)",
           overflow: "hidden",
           position: "relative",
           zIndex: 1
         }}
       >
-        {}
-        <div
+        <nav
           style={{
-            height: "3px",
-            background: "linear-gradient(90deg,#39d0ff,#0096b4)"
-          }}
-        />
-
-        {}
-        <div
-          style={{
-            padding: "32px 36px 24px",
-            borderBottom: "1px solid #1c2535"
+            borderRight: "1px solid #1c2535",
+            background: "#0d1117",
+            display: "flex",
+            flexDirection: "column",
+            padding: "20px 0",
+            gap: "2px",
+            overflowY: "auto"
           }}
         >
           <div
             style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "12px",
-              marginBottom: "20px"
+              fontSize: "9px",
+              textTransform: "uppercase",
+              letterSpacing: "0.15em",
+              color: "#495970",
+              padding: "8px 20px 4px"
+            }}
+          >
+            Изгледи
+          </div>
+          {NAV_ITEMS.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                padding: "9px 20px",
+                cursor: "pointer",
+                fontSize: "12px",
+                color: view === item.id ? "#39d0ff" : "#495970",
+                background:
+                  view === item.id ? "rgba(57,208,255,0.07)" : "transparent",
+                borderLeft: `2px solid ${view === item.id ? "#39d0ff" : "transparent"}`,
+                fontFamily: "'JetBrains Mono',monospace",
+                transition: "all 0.12s",
+                textAlign: "left",
+                width: "100%"
+              }}
+            >
+              <span
+                style={{ fontSize: "14px", width: "18px", textAlign: "center" }}
+              >
+                {item.icon}
+              </span>
+              {item.label}
+            </button>
+          ))}
+
+          <div
+            style={{
+              marginTop: "auto",
+              padding: "16px 20px",
+              borderTop: "1px solid #1c2535"
             }}
           >
             <div
               style={{
-                width: 40,
-                height: 40,
-                background: "rgba(57,208,255,0.1)",
-                border: "1px solid rgba(57,208,255,0.3)",
-                borderRadius: "8px",
-                display: "grid",
-                placeItems: "center",
-                fontSize: "20px"
-              }}
-            >
-              🛡
-            </div>
-            <span
-              style={{
-                fontFamily: "'Syne', sans-serif",
-                fontSize: "20px",
-                fontWeight: 800,
-                color: "#39d0ff",
-                letterSpacing: "-0.02em"
-              }}
-            >
-              NET<span style={{ color: "#cdd9e5" }}>GUARD</span>
-            </span>
-          </div>
-          <h1
-            style={{
-              fontFamily: "'Syne', sans-serif",
-              fontSize: "22px",
-              fontWeight: 700,
-              color: "#cdd9e5",
-              marginBottom: "8px",
-              letterSpacing: "-0.01em"
-            }}
-          >
-            Добре дошъл!
-          </h1>
-          <p style={{ fontSize: "12px", color: "#495970", lineHeight: 1.6 }}>
-            За да работят ИИ функциите, е нужен безплатен API ключ от Groq.
-            <br />
-            Регистрацията отнема под 2 минути и не изисква кредитна карта.
-          </p>
-        </div>
-
-        {}
-        <div style={{ padding: "28px 36px" }}>
-          {}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              gap: "16px",
-              marginBottom: "28px"
-            }}
-          >
-            {[
-              <>
-                Отвори{" "}
-                <a
-                  href="https://console.groq.com/keys"
-                  target="_blank"
-                  rel="noopener"
-                  style={{
-                    color: "#39d0ff",
-                    textDecoration: "none",
-                    borderBottom: "1px solid rgba(57,208,255,0.3)"
-                  }}
-                >
-                  console.groq.com/keys
-                </a>{" "}
-                и влез с Google акаунт или имейл.
-              </>,
-              <>
-                Натисни{" "}
-                <strong style={{ color: "#cdd9e5", fontWeight: 600 }}>
-                  „Create API Key"
-                </strong>
-                , дай му произволно име (напр.{" "}
-                <strong style={{ color: "#cdd9e5", fontWeight: 600 }}>
-                  NetGuard
-                </strong>
-                ) и копирай ключа.
-              </>,
-              <>
-                Постави ключа по-долу и натисни{" "}
-                <strong style={{ color: "#cdd9e5", fontWeight: 600 }}>
-                  „Запази"
-                </strong>
-                . Това е всичко — повече няма да те питаме.
-              </>
-            ].map((text, i) => (
-              <div
-                key={i}
-                style={{
-                  display: "flex",
-                  gap: "14px",
-                  alignItems: "flex-start"
-                }}
-              >
-                <div
-                  style={{
-                    width: 26,
-                    height: 26,
-                    borderRadius: "50%",
-                    background: "rgba(57,208,255,0.1)",
-                    border: "1px solid rgba(57,208,255,0.25)",
-                    color: "#39d0ff",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    display: "grid",
-                    placeItems: "center",
-                    flexShrink: 0,
-                    marginTop: "1px"
-                  }}
-                >
-                  {i + 1}
-                </div>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "#cdd9e5",
-                    lineHeight: 1.6
-                  }}
-                >
-                  {text}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {}
-          <div style={{ marginBottom: "16px" }}>
-            <label
-              style={{
-                display: "block",
-                fontSize: "10px",
+                fontSize: "9px",
                 textTransform: "uppercase",
-                letterSpacing: "0.12em",
+                letterSpacing: "0.15em",
                 color: "#495970",
                 marginBottom: "8px"
               }}
             >
-              Groq API ключ
-            </label>
-            <div style={{ display: "flex", gap: "8px" }}>
-              <input
-                ref={inputRef}
-                type="text"
-                value={key}
-                onChange={(e) => setKey(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && saveKey()}
-                placeholder="gsk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                autoComplete="off"
-                spellCheck={false}
-                style={{
-                  flex: 1,
-                  background: "#0d1117",
-                  border: `1px solid ${borderColor}`,
-                  borderRadius: "6px",
-                  padding: "10px 14px",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: "12px",
-                  color: "#cdd9e5",
-                  outline: "none",
-                  transition: "border-color 0.15s"
-                }}
-              />
-              <button
-                onClick={saveKey}
-                disabled={loading}
-                style={{
-                  padding: "10px 20px",
-                  background: loading ? "#2a3a4d" : "#39d0ff",
-                  color: loading ? "#495970" : "#000",
-                  border: "none",
-                  borderRadius: "6px",
-                  fontFamily: "'JetBrains Mono', monospace",
-                  fontSize: "11px",
-                  fontWeight: 700,
-                  letterSpacing: "0.06em",
-                  textTransform: "uppercase",
-                  cursor: loading ? "not-allowed" : "pointer",
-                  whiteSpace: "nowrap",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  transition: "background 0.15s"
-                }}
-              >
-                {loading && (
-                  <span
-                    style={{
-                      width: "11px",
-                      height: "11px",
-                      border: "2px solid rgba(0,0,0,0.25)",
-                      borderTopColor: "#000",
-                      borderRadius: "50%",
-                      animation: "ng-spin 0.7s linear infinite",
-                      display: "inline-block"
-                    }}
-                  />
-                )}
-                {loading ? "Проверка…" : "Запази"}
-              </button>
+              Обобщение
             </div>
-            {status && (
+            {[
+              { label: "Критични", value: stats?.critical, color: "#f14c4c" },
+              { label: "Високи", value: stats?.high, color: "#e8834a" },
+              { label: "Средни", value: stats?.medium, color: "#e5c07b" },
+              { label: "Сканирани", value: stats?.total, color: "#cdd9e5" }
+            ].map((s) => (
               <div
+                key={s.label}
                 style={{
-                  fontSize: "11px",
-                  padding: "10px 14px",
-                  borderRadius: "6px",
-                  marginTop: "12px",
-                  lineHeight: 1.5,
-                  background:
-                    status.type === "err"
-                      ? "rgba(241,76,76,0.1)"
-                      : "rgba(35,209,139,0.1)",
-                  border:
-                    status.type === "err"
-                      ? "1px solid rgba(241,76,76,0.25)"
-                      : "1px solid rgba(35,209,139,0.25)",
-                  color: status.type === "err" ? "#f14c4c" : "#23d18b"
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  padding: "5px 0",
+                  fontSize: "11px"
                 }}
               >
-                {status.text}
+                <span style={{ color: "#495970" }}>{s.label}</span>
+                <span style={{ fontWeight: 500, color: s.color }}>
+                  {s.value ?? "—"}
+                </span>
               </div>
-            )}
+            ))}
           </div>
-        </div>
+        </nav>
 
-        {}
-        <div
-          style={{ padding: "16px 36px 24px", borderTop: "1px solid #1c2535" }}
+        <main
+          style={{
+            overflowY: "auto",
+            padding: "28px 32px",
+            display: "flex",
+            flexDirection: "column",
+            gap: "24px"
+          }}
         >
-          <p style={{ fontSize: "10px", color: "#495970", lineHeight: 1.7 }}>
-            <strong style={{ color: "#e5c07b", fontWeight: 500 }}>
-              ⚠ Поверителност:
-            </strong>{" "}
-            Ключът се съхранява само на твоя компютър (Windows Credential
-            Manager) и никога не се изпраща никъде освен директно към Groq при
-            ИИ анализ. Groq предлага безплатен план с достатъчно квота за
-            нормална употреба.
-          </p>
-        </div>
+          {view === "overview" && (
+            <OverviewView
+              stats={stats}
+              threats={threats}
+              onOpenDetail={setActiveExt}
+              lastUpdated={lastUpdated}
+            />
+          )}
+          {view === "threats" && (
+            <ThreatsView threats={threats} onOpenDetail={setActiveExt} />
+          )}
+          {view === "all" && (
+            <AllExtensionsView
+              extensions={allExts}
+              onOpenDetail={setActiveExt}
+            />
+          )}
+          {view === "statview" && (
+            <StatisticsView active={view === "statview"} />
+          )}
+        </main>
       </div>
 
+      {activeExt && (
+        <DetailPanel ext={activeExt} onClose={() => setActiveExt(null)} />
+      )}
+
       <style>{`
-        @keyframes ng-spin { to { transform: rotate(360deg); } }
+        @keyframes ng-blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2a3a4d; border-radius: 3px; }
       `}</style>
     </div>
   );

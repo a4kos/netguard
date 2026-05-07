@@ -1,19 +1,9 @@
 const DESKTOP_URL = "https://netguard.noit.eu";
 const SCAN_INTERVAL_MINUTES = 5;
 
-// ─── TOKEN ────────────────────────────────────────────────────────────────────
-// Each installation gets a unique token generated on first install.
-// It is stored in chrome.storage.sync and never leaves the browser except as
-// the Authorization header sent to the API. No token is ever hardcoded.
-
 async function getToken() {
-  let { apiToken } = await chrome.storage.sync.get("apiToken");
-  if (!apiToken) {
-    apiToken = "ng-" + crypto.randomUUID();
-    await chrome.storage.sync.set({ apiToken });
-    console.log("[Net Guard] New unique token generated.");
-  }
-  return apiToken;
+  const { apiToken } = await chrome.storage.sync.get("apiToken");
+  return apiToken || "";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -152,6 +142,11 @@ function scoreSeverity(score) {
 
 async function syncToDesktop(extensions) {
   const token = await getToken();
+
+  if (!token) {
+    console.warn("[Net Guard] No token set — open Options to configure.");
+    return;
+  }
 
   try {
     const resp = await fetch(`${DESKTOP_URL}/api/proxy/sync`, {
